@@ -1,0 +1,50 @@
+# ─── Secrets — NEVER commit real credentials ───────────────────────────────
+.streamlit/secrets.toml
+
+# ─── Python ────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+
+# ─── Virtual environments ───────────────────────────────────────────────────
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# ─── Temporary / generated audio ────────────────────────────────────────────
+*.wav
+*.mp3
+output_audio.*
+
+# ─── IDEs & OS files ────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ─── Jupyter ────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ─── Logs ───────────────────────────────────────────────────────────────────
+*.log

@@ -98,6 +98,15 @@ AZURE_SPEECH_REGION = "eastus"
 
 ---
 
+## 🌐 Live Demo
+
+The app is deployed and publicly accessible on Streamlit Cloud.
+No installation required — just open the link and start transcribing or synthesising speech instantly.
+
+👉 [https://voxis-voice-studio.streamlit.app/](https://voxis-voice-studio.streamlit.app/)
+
+---
+
 ## 📁 Project Structure
 
 ```

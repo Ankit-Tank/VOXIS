@@ -1,5 +1,2 @@
-# System packages required by azure-cognitiveservices-speech on Linux
-# Streamlit Cloud (Ubuntu) needs these to run the Azure Speech SDK.
-
-libssl-dev
 libasound2
+libssl-dev

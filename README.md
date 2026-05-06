@@ -148,3 +148,11 @@ voxis/
 ## 📜 License
 
 MIT — see [LICENSE](LICENSE) for details.
+
+---
+
+## 🙋 Author
+
+Made with ❤️ by **Ankit Tank**
+
+If you found this project useful, consider giving it a ⭐ on GitHub.

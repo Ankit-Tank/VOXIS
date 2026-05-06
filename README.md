@@ -23,7 +23,7 @@
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/<your-username>/voxis.git
+git clone https://github.com/Ankit-Tank/voxis.git
 cd voxis
 ```
 
@@ -108,8 +108,7 @@ voxis/
 ├── README.md                       # This file
 └── .streamlit/
     ├── config.toml                 # Streamlit theme & server config
-    ├── secrets.toml                # ⚠ LOCAL ONLY — gitignored
-    └── secrets.toml.example        # Safe template to commit
+    └── secrets.toml.example        
 ```
 
 ---

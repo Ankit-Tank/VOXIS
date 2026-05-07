@@ -884,9 +884,6 @@ def main():
               </div>
               <div style="font-size:0.78rem;color:var(--cream-dim);line-height:1.8;">
                 WAV · MP3 · OGG · FLAC · M4A<br>
-                <span style="opacity:0.5;font-size:0.68rem;font-family:var(--font-mono);">
-                  Max recommended: 25 MB
-                </span>
               </div>
             </div>
             """, unsafe_allow_html=True)

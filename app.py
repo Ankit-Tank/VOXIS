@@ -10,7 +10,6 @@ import tempfile
 import json
 import streamlit as st
 import azure.cognitiveservices.speech as speechsdk
-from pydub import AudioSegment
 from azure.cognitiveservices.vision.computervision import ComputerVisionClient
 from azure.cognitiveservices.vision.computervision.models import OperationStatusCodes
 from msrest.authentication import CognitiveServicesCredentials
@@ -537,75 +536,50 @@ MAX_CHARS = 3000
 
 def transcribe_audio(audio_path: str, language_code: str, key: str, region: str) -> dict:
     """Transcribe audio using Azure Speech SDK."""
-
-    wav_path = None
-
     try:
-        # Convert any audio format to clean WAV PCM
-        audio = AudioSegment.from_file(audio_path)
-
-        audio = (
-            audio.set_frame_rate(16000)
-            .set_channels(1)
-            .set_sample_width(2)
-        )
-
-        wav_temp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-        wav_path = wav_temp.name
-        wav_temp.close()
-
-        audio.export(wav_path, format="wav")
-
-        # Azure Speech Config
-        config = speechsdk.SpeechConfig(
-            subscription=key,
-            region=region
-        )
-
+        config = speechsdk.SpeechConfig(subscription=key, region=region)
         config.speech_recognition_language = language_code
 
-        audio_cfg = speechsdk.audio.AudioConfig(filename=wav_path)
+        audio_cfg = speechsdk.audio.AudioConfig(filename=audio_path)
+        recognizer = speechsdk.SpeechRecognizer(speech_config=config, audio_config=audio_cfg)
 
-        recognizer = speechsdk.SpeechRecognizer(
-            speech_config=config,
-            audio_config=audio_cfg
-        )
+        results, errors = [], []
+        done = False
 
-        result = recognizer.recognize_once()
+        def on_recognized(evt):
+            if evt.result.reason == speechsdk.ResultReason.RecognizedSpeech:
+                results.append(evt.result.text)
 
-        if result.reason == speechsdk.ResultReason.RecognizedSpeech:
-            return {
-                "success": True,
-                "text": result.text,
-                "error": None
-            }
+        def on_canceled(evt):
+            nonlocal done
+            if evt.result.cancellation_details.reason == speechsdk.CancellationReason.Error:
+                errors.append(evt.result.cancellation_details.error_details)
+            done = True
 
-        elif result.reason == speechsdk.ResultReason.NoMatch:
-            return {
-                "success": False,
-                "text": "",
-                "error": "No speech recognized."
-            }
+        def on_stopped(evt):
+            nonlocal done
+            done = True
 
-        else:
-            cancellation = result.cancellation_details
+        recognizer.recognized.connect(on_recognized)
+        recognizer.canceled.connect(on_canceled)
+        recognizer.session_stopped.connect(on_stopped)
+        recognizer.start_continuous_recognition()
 
-            return {
-                "success": False,
-                "text": "",
-                "error": cancellation.error_details
-            }
+        timeout_s, elapsed = 120, 0.0
+        while not done and elapsed < timeout_s:
+            time.sleep(0.1)
+            elapsed += 0.1
 
+        recognizer.stop_continuous_recognition()
+
+        text = " ".join(results).strip()
+        if errors:
+            return {"success": False, "text": text, "error": "; ".join(errors)}
+        if not text:
+            return {"success": False, "text": "", "error": "No speech recognised."}
+        return {"success": True, "text": text, "error": None}
     except Exception as e:
-        return {
-            "success": False,
-            "text": "",
-            "error": str(e)
-        }
-
-    finally:
-        if wav_path and os.path.exists(wav_path):
-            os.unlink(wav_path)
+        return {"success": False, "text": "", "error": str(e)}
 
 
 def synthesise_speech(text: str, voice_name: str, key: str, region: str) -> dict:

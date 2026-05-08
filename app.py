@@ -922,7 +922,7 @@ def main():
         with col_upload:
             uploaded_image = st.file_uploader(
                 "Drop your image here",
-                type=["jpg", "jpeg", "png", "bmp", "pdf", "tiff"],
+                type=["jpg", "jpeg", "png", "bmp", "tiff"],
                 key="ocr_file",
                 label_visibility="collapsed",
             )

@@ -739,7 +739,7 @@ def main():
                 Supported Formats
               </div>
               <div style="font-size:0.78rem;color:var(--cream-dim);margin-top:0.6rem;">
-                WAV · MP3 · OGG · FLAC · M4A
+                WAV
               </div>
             </div>
             """, unsafe_allow_html=True)
@@ -747,7 +747,7 @@ def main():
         with col_upload:
             uploaded_file = st.file_uploader(
                 "Drop your audio file here",
-                type=["wav", "mp3", "ogg", "flac", "m4a", "mp4"],
+                type=["wav"],
                 key="stt_file",
                 label_visibility="collapsed",
             )

@@ -1,15 +1,18 @@
 """
-VOXIS — AI Voice Studio
-Azure Cognitive Services Speech SDK · Streamlit Cloud Ready
+VOXIS — AI Voice Studio + OCR
+Azure Cognitive Services Speech SDK + Computer Vision
 Credentials are loaded exclusively from st.secrets (never hardcoded)
 """
 
 import os
 import time
 import tempfile
-import base64
+import json
 import streamlit as st
 import azure.cognitiveservices.speech as speechsdk
+from azure.cognitiveservices.vision.computervision import ComputerVisionClient
+from azure.cognitiveservices.vision.computervision.models import OperationStatusCodes
+from msrest.authentication import CognitiveServicesCredentials
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PAGE CONFIG  (must be the very first Streamlit call)
@@ -166,37 +169,6 @@ p, span, label, div { font-family: var(--font-ui) !important; }
   50%       { transform: scaleY(1.6); opacity: 1; }
 }
 
-/* ── TAB SELECTOR ────────────────────────────────────── */
-.mode-selector {
-  display: flex;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 50px;
-  padding: 5px;
-  margin: 0 auto 2.5rem;
-  width: fit-content;
-  gap: 4px;
-}
-.mode-btn {
-  padding: 0.55rem 1.8rem;
-  border-radius: 50px;
-  font-family: var(--font-ui);
-  font-size: 0.8rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  color: var(--cream-dim);
-  background: transparent;
-  border: none;
-}
-.mode-btn.active {
-  background: linear-gradient(135deg, var(--gold-dim), var(--gold));
-  color: var(--obsidian);
-  box-shadow: 0 4px 20px rgba(201,168,76,0.35);
-}
-
 /* ── CARDS / PANELS ──────────────────────────────────── */
 .panel {
   background: var(--surface-1);
@@ -253,8 +225,6 @@ p, span, label, div { font-family: var(--font-ui) !important; }
   font-weight: 400;
 }
 
-/* ── STREAMLIT WIDGET OVERRIDES ──────────────────────── */
-
 /* file uploader */
 [data-testid="stFileUploader"] {
   background: var(--surface-2) !important;
@@ -274,7 +244,6 @@ p, span, label, div { font-family: var(--font-ui) !important; }
   font-family: var(--font-ui) !important;
   font-size: 0.85rem !important;
 }
-[data-testid="stFileUploaderDropzoneInput"] + div { color: var(--gold) !important; }
 
 /* selectbox */
 [data-testid="stSelectbox"] label {
@@ -290,10 +259,6 @@ p, span, label, div { font-family: var(--font-ui) !important; }
   border-radius: var(--radius-sm) !important;
   color: var(--cream) !important;
   font-family: var(--font-ui) !important;
-  font-size: 0.88rem !important;
-}
-[data-testid="stSelectbox"] > div > div:hover {
-  border-color: var(--gold) !important;
 }
 
 /* text area */
@@ -310,30 +275,10 @@ p, span, label, div { font-family: var(--font-ui) !important; }
   border-radius: var(--radius-md) !important;
   color: var(--cream) !important;
   font-family: var(--font-ui) !important;
-  font-size: 0.92rem !important;
-  line-height: 1.7 !important;
   resize: vertical !important;
-  transition: border-color 0.3s ease !important;
-}
-[data-testid="stTextArea"] textarea:focus {
-  border-color: var(--gold) !important;
-  box-shadow: 0 0 0 2px rgba(201,168,76,0.15) !important;
-  outline: none !important;
 }
 
-/* slider */
-[data-testid="stSlider"] label {
-  font-family: var(--font-mono) !important;
-  font-size: 0.7rem !important;
-  letter-spacing: 0.2em !important;
-  text-transform: uppercase !important;
-  color: var(--gold) !important;
-}
-[data-testid="stSlider"] [data-baseweb="slider"] div[role="slider"] {
-  background: var(--gold) !important;
-}
-
-/* buttons — primary */
+/* buttons */
 [data-testid="stButton"] > button {
   background: linear-gradient(135deg, var(--gold-dim) 0%, var(--gold) 50%, var(--gold-dim) 100%) !important;
   color: var(--obsidian) !important;
@@ -353,19 +298,13 @@ p, span, label, div { font-family: var(--font-ui) !important; }
   transform: translateY(-1px) !important;
   box-shadow: 0 8px 32px rgba(201,168,76,0.5) !important;
 }
-[data-testid="stButton"] > button:active {
-  transform: translateY(0) !important;
-}
 
 /* download button */
 [data-testid="stDownloadButton"] > button {
   background: transparent !important;
   color: var(--gold) !important;
-  font-family: var(--font-ui) !important;
   font-weight: 600 !important;
   font-size: 0.78rem !important;
-  letter-spacing: 0.18em !important;
-  text-transform: uppercase !important;
   border: 1px solid var(--gold-dim) !important;
   border-radius: 50px !important;
   padding: 0.7rem 2rem !important;
@@ -375,7 +314,6 @@ p, span, label, div { font-family: var(--font-ui) !important; }
 [data-testid="stDownloadButton"] > button:hover {
   background: rgba(201,168,76,0.1) !important;
   border-color: var(--gold) !important;
-  box-shadow: 0 4px 20px rgba(201,168,76,0.2) !important;
 }
 
 /* audio player */
@@ -385,9 +323,12 @@ p, span, label, div { font-family: var(--font-ui) !important; }
   border-radius: var(--radius-md) !important;
   padding: 0.5rem !important;
 }
-[data-testid="stAudio"] audio {
-  width: 100% !important;
-  filter: invert(1) hue-rotate(180deg) brightness(0.9) !important;
+
+/* image display */
+[data-testid="stImage"] {
+  border-radius: var(--radius-md) !important;
+  border: 1px solid var(--border) !important;
+  overflow: hidden !important;
 }
 
 /* alerts */
@@ -396,40 +337,10 @@ p, span, label, div { font-family: var(--font-ui) !important; }
   border-radius: var(--radius-md) !important;
   border: 1px solid !important;
   font-family: var(--font-ui) !important;
-  font-size: 0.85rem !important;
-}
-[data-testid="stAlert"][data-baseweb="notification"] {
-  border-color: var(--border) !important;
-}
-
-/* success alert */
-div[data-baseweb="notification"].st-emotion-cache-1xarl3l {
-  background: rgba(74,156,106,0.12) !important;
-  border-color: rgba(74,156,106,0.4) !important;
 }
 
 /* spinner */
 [data-testid="stSpinner"] { color: var(--gold) !important; }
-.stSpinner > div { border-color: var(--gold) transparent transparent !important; }
-
-/* columns gap */
-[data-testid="stHorizontalBlock"] { gap: 1rem !important; }
-
-/* radio (for voice gender) */
-[data-testid="stRadio"] label {
-  font-family: var(--font-mono) !important;
-  font-size: 0.7rem !important;
-  letter-spacing: 0.2em !important;
-  text-transform: uppercase !important;
-  color: var(--gold) !important;
-}
-[data-testid="stRadio"] div[data-baseweb="radio"] label {
-  font-family: var(--font-ui) !important;
-  font-size: 0.85rem !important;
-  text-transform: none !important;
-  letter-spacing: 0 !important;
-  color: var(--cream) !important;
-}
 
 /* ── RESULT BOX ──────────────────────────────────────── */
 .result-box {
@@ -455,7 +366,6 @@ div[data-baseweb="notification"].st-emotion-cache-1xarl3l {
   text-transform: uppercase;
   color: var(--gold);
   margin-bottom: 0.8rem;
-  opacity: 0.7;
 }
 .result-text {
   font-family: var(--font-ui);
@@ -465,16 +375,8 @@ div[data-baseweb="notification"].st-emotion-cache-1xarl3l {
   white-space: pre-wrap;
   word-break: break-word;
 }
-.result-meta {
-  margin-top: 0.8rem;
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  color: var(--cream-dim);
-  opacity: 0.6;
-  letter-spacing: 0.1em;
-}
 
-/* ── STAT CHIPS ──────────────────────────────────────── */
+/* stat chips */
 .stat-row {
   display: flex;
   gap: 0.7rem;
@@ -489,42 +391,17 @@ div[data-baseweb="notification"].st-emotion-cache-1xarl3l {
   font-family: var(--font-mono);
   font-size: 0.65rem;
   color: var(--cream-dim);
-  letter-spacing: 0.12em;
 }
 .stat-chip b { color: var(--gold); font-weight: 500; }
 
-/* ── VOICE CARD GRID ─────────────────────────────────── */
-.voice-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0.6rem;
-  margin-top: 0.8rem;
-}
-.voice-card {
-  background: var(--surface-2);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
-  padding: 0.7rem 1rem;
-  cursor: pointer;
-  transition: all 0.25s ease;
-}
-.voice-card:hover { border-color: var(--gold-dim); background: var(--surface-3); }
-.voice-card.selected { border-color: var(--gold); background: rgba(201,168,76,0.07); }
-.voice-name { font-size: 0.82rem; color: var(--cream); font-weight: 600; margin-bottom: 0.2rem; }
-.voice-desc { font-size: 0.68rem; color: var(--cream-dim); font-family: var(--font-mono); }
-
-/* ── CHAR COUNTER ────────────────────────────────────── */
+/* char counter */
 .char-counter {
   text-align: right;
   font-family: var(--font-mono);
   font-size: 0.65rem;
   color: var(--cream-dim);
   margin-top: 0.3rem;
-  opacity: 0.6;
-  letter-spacing: 0.1em;
 }
-.char-counter.warn { color: var(--gold); opacity: 1; }
-.char-counter.danger { color: var(--danger); opacity: 1; }
 
 /* ── FOOTER ──────────────────────────────────────────── */
 .voxis-footer {
@@ -536,36 +413,16 @@ div[data-baseweb="notification"].st-emotion-cache-1xarl3l {
   color: var(--cream-dim);
   opacity: 0.35;
   text-transform: uppercase;
+  border-top: 1px solid var(--border-soft);
+  margin-top: 2rem;
 }
 
-/* ── SECTION SEPARATOR ───────────────────────────────── */
-.section-sep {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin: 1.5rem 0;
-}
-.section-sep::before, .section-sep::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: var(--border);
-}
-.section-sep-text {
-  font-family: var(--font-mono);
-  font-size: 0.6rem;
-  letter-spacing: 0.2em;
-  color: var(--gold-dim);
-  text-transform: uppercase;
-}
-
-/* ── MODE TABS (Streamlit native) ────────────────────── */
+/* ── MODE TABS ────────────────────────────────────────── */
 [data-testid="stTabs"] [data-baseweb="tab-list"] {
   background: var(--surface-2) !important;
   border: 1px solid var(--border) !important;
   border-radius: 50px !important;
   padding: 4px !important;
-  gap: 0 !important;
   width: fit-content !important;
   margin: 0 auto 2rem !important;
 }
@@ -579,25 +436,16 @@ div[data-baseweb="notification"].st-emotion-cache-1xarl3l {
   text-transform: uppercase !important;
   color: var(--cream-dim) !important;
   padding: 0.5rem 1.8rem !important;
-  transition: all 0.3s ease !important;
-  border: none !important;
 }
 [data-testid="stTabs"] [aria-selected="true"] {
   background: linear-gradient(135deg, var(--gold-dim), var(--gold)) !important;
   color: var(--obsidian) !important;
   box-shadow: 0 3px 16px rgba(201,168,76,0.35) !important;
 }
-[data-testid="stTabs"] [data-baseweb="tab-highlight"] {
-  display: none !important;
-}
-[data-testid="stTabs"] [data-baseweb="tab-border"] {
-  display: none !important;
-}
-[data-testid="stTabPanel"] {
-  padding: 0 !important;
-}
+[data-testid="stTabs"] [data-baseweb="tab-highlight"] { display: none !important; }
+[data-testid="stTabs"] [data-baseweb="tab-border"] { display: none !important; }
 
-/* ── STATUS BADGE ────────────────────────────────────── */
+/* status badge */
 .status-badge {
   display: inline-flex;
   align-items: center;
@@ -608,7 +456,6 @@ div[data-baseweb="notification"].st-emotion-cache-1xarl3l {
   padding: 0.3rem 0.8rem;
   font-family: var(--font-mono);
   font-size: 0.62rem;
-  letter-spacing: 0.15em;
   color: #6EC98A;
   text-transform: uppercase;
 }
@@ -620,41 +467,24 @@ div[data-baseweb="notification"].st-emotion-cache-1xarl3l {
 }
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; transform: scale(1); }
-  50%       { opacity: 0.5; transform: scale(0.8); }
-}
-
-/* fix stMarkdown rendering */
-[data-testid="stMarkdownContainer"] { font-family: var(--font-ui) !important; }
-
-/* number input */
-[data-testid="stNumberInput"] label {
-  font-family: var(--font-mono) !important;
-  font-size: 0.7rem !important;
-  letter-spacing: 0.2em !important;
-  text-transform: uppercase !important;
-  color: var(--gold) !important;
-}
-[data-testid="stNumberInput"] input {
-  background: var(--surface-2) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: var(--radius-sm) !important;
-  color: var(--cream) !important;
-  font-family: var(--font-ui) !important;
+  50% { opacity: 0.5; transform: scale(0.8); }
 }
 </style>
 """, unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CREDENTIAL LOADING  (only from st.secrets — never hardcoded)
+# CREDENTIAL LOADING
 # ─────────────────────────────────────────────────────────────────────────────
 @st.cache_resource(show_spinner=False)
-def load_credentials() -> tuple[str, str]:
+def load_credentials() -> tuple[str, str, str, str]:
     """Load Azure credentials from Streamlit secrets."""
     try:
-        key    = st.secrets["AZURE_SPEECH_KEY"]
-        region = st.secrets["AZURE_SPEECH_REGION"]
-        return key, region
+        speech_key = st.secrets["AZURE_SPEECH_KEY"]
+        speech_region = st.secrets["AZURE_SPEECH_REGION"]
+        vision_endpoint = st.secrets["AZURE_VISION_ENDPOINT"]
+        vision_key = st.secrets["AZURE_VISION_KEY"]
+        return speech_key, speech_region, vision_endpoint, vision_key
     except KeyError as e:
         st.error(
             f"⚠️  Missing secret: `{e}`.  "
@@ -669,142 +499,165 @@ def load_credentials() -> tuple[str, str]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 VOICES: dict[str, dict] = {
-    "Jenny (Female · Warm)"    : {"name": "en-US-JennyNeural",    "lang": "en-US"},
-    "Aria (Female · Expressive)": {"name": "en-US-AriaNeural",     "lang": "en-US"},
-    "Emma (Female · Cheerful)" : {"name": "en-US-EmmaNeural",      "lang": "en-US"},
-    "Guy (Male · Neutral)"     : {"name": "en-US-GuyNeural",       "lang": "en-US"},
-    "Davis (Male · Formal)"    : {"name": "en-US-DavisNeural",     "lang": "en-US"},
-    "Brian (Male · Deep)"      : {"name": "en-US-BrianNeural",     "lang": "en-US"},
-    "Sonia (Female · British)" : {"name": "en-GB-SoniaNeural",     "lang": "en-GB"},
-    "Ryan (Male · British)"    : {"name": "en-GB-RyanNeural",      "lang": "en-GB"},
+    "Jenny (Female · Warm)": {"name": "en-US-JennyNeural", "lang": "en-US"},
+    "Aria (Female · Expressive)": {"name": "en-US-AriaNeural", "lang": "en-US"},
+    "Emma (Female · Cheerful)": {"name": "en-US-EmmaNeural", "lang": "en-US"},
+    "Guy (Male · Neutral)": {"name": "en-US-GuyNeural", "lang": "en-US"},
+    "Davis (Male · Formal)": {"name": "en-US-DavisNeural", "lang": "en-US"},
+    "Brian (Male · Deep)": {"name": "en-US-BrianNeural", "lang": "en-US"},
 }
 
 LANGUAGES: dict[str, str] = {
-    "English (US)"    : "en-US",
-    "English (UK)"    : "en-GB",
-    "English (India)" : "en-IN",
-    "Hindi"           : "hi-IN",
-    "Spanish"         : "es-ES",
-    "French"          : "fr-FR",
-    "German"          : "de-DE",
-    "Portuguese"      : "pt-BR",
-    "Japanese"        : "ja-JP",
-    "Chinese (Mandarin)": "zh-CN",
+    "English (US)": "en-US",
+    "English (UK)": "en-GB",
+    "Spanish": "es-ES",
+    "French": "fr-FR",
+    "German": "de-DE",
+    "Portuguese": "pt-BR",
+    "Japanese": "ja-JP",
 }
 
 MAX_CHARS = 3000
 
 
-def transcribe_audio(audio_path: str, language_code: str,
-                     key: str, region: str) -> dict:
-    """
-    Transcribe an audio file using Azure continuous recognition.
-    Returns {'success': bool, 'text': str, 'error': str|None}
-    """
-    config = speechsdk.SpeechConfig(subscription=key, region=region)
-    config.speech_recognition_language = language_code
-
-    audio_cfg   = speechsdk.audio.AudioConfig(filename=audio_path)
-    recognizer  = speechsdk.SpeechRecognizer(speech_config=config,
-                                              audio_config=audio_cfg)
-
-    results: list[str] = []
-    errors:  list[str] = []
-    done = False
-
-    def on_recognized(evt):
-        if evt.result.reason == speechsdk.ResultReason.RecognizedSpeech:
-            results.append(evt.result.text)
-
-    def on_canceled(evt):
-        nonlocal done
-        details = evt.result.cancellation_details
-        if details.reason == speechsdk.CancellationReason.Error:
-            errors.append(details.error_details)
-        done = True
-
-    def on_stopped(evt):
-        nonlocal done
-        done = True
-
-    recognizer.recognized.connect(on_recognized)
-    recognizer.canceled.connect(on_canceled)
-    recognizer.session_stopped.connect(on_stopped)
-
-    recognizer.start_continuous_recognition()
-
-    timeout_s, elapsed = 120, 0.0
-    while not done and elapsed < timeout_s:
-        time.sleep(0.1)
-        elapsed += 0.1
-
-    recognizer.stop_continuous_recognition()
-
-    text = " ".join(results).strip()
-    if errors:
-        return {"success": False, "text": text,
-                "error": "; ".join(errors)}
-    if not text:
-        return {"success": False, "text": "",
-                "error": "No speech could be recognised in the audio."}
-    return {"success": True, "text": text, "error": None}
-
-
-def synthesise_speech(text: str, voice_name: str,
-                      key: str, region: str) -> dict:
-    """
-    Synthesise speech from text.
-    Returns {'success': bool, 'audio': bytes|None, 'error': str|None}
-    """
-    config = speechsdk.SpeechConfig(subscription=key, region=region)
-    config.speech_synthesis_voice_name = voice_name
-
-    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-    tmp.close()
-
+def transcribe_audio(audio_path: str, language_code: str, key: str, region: str) -> dict:
+    """Transcribe audio using Azure Speech SDK."""
     try:
-        audio_cfg   = speechsdk.audio.AudioOutputConfig(filename=tmp.name)
-        synthesizer = speechsdk.SpeechSynthesizer(speech_config=config,
-                                                   audio_config=audio_cfg)
+        config = speechsdk.SpeechConfig(subscription=key, region=region)
+        config.speech_recognition_language = language_code
+
+        audio_cfg = speechsdk.audio.AudioConfig(filename=audio_path)
+        recognizer = speechsdk.SpeechRecognizer(speech_config=config, audio_config=audio_cfg)
+
+        results, errors = [], []
+        done = False
+
+        def on_recognized(evt):
+            if evt.result.reason == speechsdk.ResultReason.RecognizedSpeech:
+                results.append(evt.result.text)
+
+        def on_canceled(evt):
+            nonlocal done
+            if evt.result.cancellation_details.reason == speechsdk.CancellationReason.Error:
+                errors.append(evt.result.cancellation_details.error_details)
+            done = True
+
+        def on_stopped(evt):
+            nonlocal done
+            done = True
+
+        recognizer.recognized.connect(on_recognized)
+        recognizer.canceled.connect(on_canceled)
+        recognizer.session_stopped.connect(on_stopped)
+        recognizer.start_continuous_recognition()
+
+        timeout_s, elapsed = 120, 0.0
+        while not done and elapsed < timeout_s:
+            time.sleep(0.1)
+            elapsed += 0.1
+
+        recognizer.stop_continuous_recognition()
+
+        text = " ".join(results).strip()
+        if errors:
+            return {"success": False, "text": text, "error": "; ".join(errors)}
+        if not text:
+            return {"success": False, "text": "", "error": "No speech recognised."}
+        return {"success": True, "text": text, "error": None}
+    except Exception as e:
+        return {"success": False, "text": "", "error": str(e)}
+
+
+def synthesise_speech(text: str, voice_name: str, key: str, region: str) -> dict:
+    """Synthesise speech from text."""
+    try:
+        config = speechsdk.SpeechConfig(subscription=key, region=region)
+        config.speech_synthesis_voice_name = voice_name
+
+        tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+        tmp.close()
+
+        audio_cfg = speechsdk.audio.AudioOutputConfig(filename=tmp.name)
+        synthesizer = speechsdk.SpeechSynthesizer(speech_config=config, audio_config=audio_cfg)
         result = synthesizer.speak_text_async(text).get()
 
         if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
             with open(tmp.name, "rb") as fh:
                 audio_bytes = fh.read()
+            os.unlink(tmp.name)
             return {"success": True, "audio": audio_bytes, "error": None}
 
-        cancel = result.cancellation_details
-        return {"success": False, "audio": None,
-                "error": f"Synthesis cancelled: {cancel.error_details}"}
-
-    finally:
-        if os.path.exists(tmp.name):
-            os.unlink(tmp.name)
+        os.unlink(tmp.name)
+        return {"success": False, "audio": None, "error": str(result.cancellation_details.error_details)}
+    except Exception as e:
+        return {"success": False, "audio": None, "error": str(e)}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# RENDER HELPERS
-# ─────────────────────────────────────────────────────────────────────────────
+def extract_ocr(image_path: str, endpoint: str, key: str) -> dict:
+    """Extract text from image using Azure Computer Vision OCR."""
+    try:
+        client = ComputerVisionClient(endpoint, CognitiveServicesCredentials(key))
+        
+        with open(image_path, "rb") as img:
+            response = client.read_in_stream(img, raw=True)
+        
+        operation_id = response.headers["Operation-Location"].split("/")[-1]
+        elapsed = 0
+        
+        while elapsed < 30:
+            result = client.get_read_result(operation_id)
+            if result.status not in [OperationStatusCodes.running, OperationStatusCodes.not_started]:
+                break
+            time.sleep(1)
+            elapsed += 1
+        
+        if result.status != OperationStatusCodes.succeeded:
+            return {"success": False, "text": "", "error": f"OCR failed with status: {result.status}"}
+        
+        all_text = []
+        all_words = []
+        
+        for page in result.analyze_result.read_results:
+            for line in page.lines:
+                all_text.append(line.text)
+                for word in line.words:
+                    all_words.append({"word": word.text, "confidence": word.confidence})
+        
+        extracted_text = "\n".join(all_text)
+        avg_confidence = sum(w["confidence"] for w in all_words) / len(all_words) if all_words else 0
+        
+        return {
+            "success": True,
+            "text": extracted_text,
+            "word_count": len(all_words),
+            "confidence": avg_confidence,
+            "error": None,
+        }
+    except Exception as e:
+        return {"success": False, "text": "", "error": str(e)}
+
 
 def render_header():
+    """Render app header."""
     bars = "".join(["<span></span>"] * 10)
     st.markdown(f"""
     <div class="voxis-header">
       <div class="voxis-eyebrow">Azure Cognitive Services · AI Voice Studio</div>
       <div class="voxis-wordmark">VOXIS</div>
-      <div class="voxis-tagline">Transform Voice &nbsp;·&nbsp; Transcribe Speech &nbsp;·&nbsp; Synthesise Sound</div>
+      <div class="voxis-tagline">Transform Voice · Transcribe Speech · Synthesise Sound · Extract Text</div>
       <div class="voxis-divider"></div>
       <div class="waveform-deco">{bars}</div>
     </div>
     """, unsafe_allow_html=True)
 
 
-def render_result(text: str):
+def render_result(text: str, label: str = "Extracted Output"):
+    """Render result box."""
     word_count = len(text.split())
     char_count = len(text)
     st.markdown(f"""
     <div class="result-box">
-      <div class="result-label">✦ Transcribed Output</div>
+      <div class="result-label">✦ {label}</div>
       <div class="result-text">{text}</div>
       <div class="stat-row">
         <div class="stat-chip"><b>{word_count}</b> words</div>
@@ -815,17 +668,12 @@ def render_result(text: str):
 
 
 def get_file_ext(mime: str) -> str:
+    """Get file extension from MIME type."""
     mapping = {
-        "audio/wav":  "wav",
-        "audio/x-wav": "wav",
-        "audio/mpeg": "mp3",
-        "audio/mp3":  "mp3",
-        "audio/ogg":  "ogg",
-        "audio/flac": "flac",
-        "audio/m4a":  "m4a",
-        "audio/mp4":  "mp4",
-        "audio/x-m4a": "m4a",
-        "video/mp4":  "mp4",
+        "audio/wav": "wav", "audio/x-wav": "wav", "audio/mpeg": "mp3",
+        "audio/mp3": "mp3", "audio/ogg": "ogg", "audio/flac": "flac",
+        "audio/m4a": "m4a", "audio/mp4": "mp4", "audio/x-m4a": "m4a",
+        "video/mp4": "mp4",
     }
     return mapping.get(mime, "wav")
 
@@ -835,12 +683,12 @@ def get_file_ext(mime: str) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def main():
-    AZURE_KEY, AZURE_REGION = load_credentials()
+    AZURE_SPEECH_KEY, AZURE_SPEECH_REGION, AZURE_VISION_ENDPOINT, AZURE_VISION_KEY = load_credentials()
 
     render_header()
 
-    # ── TABS ─────────────────────────────────────────────────────────────────
-    tab_stt, tab_tts = st.tabs(["🎤  Voice → Text", "🔊  Text → Voice"])
+    # Tabs
+    tab_stt, tab_tts, tab_ocr = st.tabs(["🎤  Voice → Text", "🔊  Text → Voice", "📸  Image → Text"])
 
     # ═════════════════════════════════════════════════════════════════════════
     # TAB 1 — SPEECH TO TEXT
@@ -870,20 +718,14 @@ def main():
             lang_code = LANGUAGES[selected_lang_label]
 
             st.markdown("""
-            <div style="
-              background:var(--surface-2);
-              border:1px solid var(--border-soft);
-              border-radius:var(--radius-md);
-              padding:1rem 1.2rem;
-              margin-top:0.8rem;
-            ">
+            <div style="background:var(--surface-2);border:1px solid var(--border-soft);
+                        border-radius:var(--radius-md);padding:1rem 1.2rem;margin-top:0.8rem;">
               <div style="font-family:var(--font-mono);font-size:0.6rem;
-                          letter-spacing:0.25em;color:var(--gold);
-                          text-transform:uppercase;margin-bottom:0.6rem;">
+                          letter-spacing:0.25em;color:var(--gold);text-transform:uppercase;">
                 Supported Formats
               </div>
-              <div style="font-size:0.78rem;color:var(--cream-dim);line-height:1.8;">
-                WAV · MP3 · OGG · FLAC · M4A<br>
+              <div style="font-size:0.78rem;color:var(--cream-dim);margin-top:0.6rem;">
+                WAV · MP3 · OGG · FLAC · M4A
               </div>
             </div>
             """, unsafe_allow_html=True)
@@ -900,45 +742,32 @@ def main():
 
         st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
 
-        transcribe_btn = st.button(
-            "✦ Transcribe Audio", key="btn_transcribe", use_container_width=True
-        )
-
-        # ── Process transcription ─────────────────────────────────────────
-        if transcribe_btn:
+        if st.button("✦ Transcribe Audio", key="btn_transcribe", use_container_width=True):
             if not uploaded_file:
                 st.warning("Please upload an audio file first.")
             else:
                 ext = get_file_ext(uploaded_file.type)
-                with tempfile.NamedTemporaryFile(
-                    suffix=f".{ext}", delete=False
-                ) as tmp:
+                with tempfile.NamedTemporaryFile(suffix=f".{ext}", delete=False) as tmp:
                     tmp.write(uploaded_file.read())
                     tmp_path = tmp.name
 
-                with st.spinner("Transcribing…  this may take a moment"):
-                    outcome = transcribe_audio(
-                        tmp_path, lang_code, AZURE_KEY, AZURE_REGION
-                    )
+                with st.spinner("Transcribing…"):
+                    outcome = transcribe_audio(tmp_path, lang_code, AZURE_SPEECH_KEY, AZURE_SPEECH_REGION)
 
                 os.unlink(tmp_path)
 
                 if outcome["success"]:
                     st.session_state["stt_result"] = outcome["text"]
                 else:
-                    st.error(f"Transcription failed: {outcome['error']}")
-                    if outcome.get("text"):
-                        st.session_state["stt_result"] = outcome["text"]
+                    st.error(f"❌ {outcome['error']}")
 
-        # ── Show cached result ────────────────────────────────────────────
         if st.session_state.get("stt_result"):
             text = st.session_state["stt_result"]
-            render_result(text)
-
+            render_result(text, "Transcribed Output")
             st.markdown("<div style='height:0.6rem'></div>", unsafe_allow_html=True)
 
-            col_copy, col_dl = st.columns(2, gap="small")
-            with col_copy:
+            col1, col2 = st.columns(2, gap="small")
+            with col1:
                 st.download_button(
                     "⬇  Download as .txt",
                     data=text,
@@ -946,8 +775,7 @@ def main():
                     mime="text/plain",
                     use_container_width=True,
                 )
-            with col_dl:
-                import json
+            with col2:
                 payload = json.dumps({
                     "transcript": text,
                     "language": selected_lang_label,
@@ -971,7 +799,7 @@ def main():
           <div class="panel-label">02 &nbsp; Synthesise Voice</div>
           <div class="panel-title">Neural Text-to-Speech</div>
           <div class="panel-desc">
-            Type or paste your text and choose from 8 premium Azure Neural voices.
+            Type or paste your text and choose from premium Azure Neural voices.
             Download the generated audio as a studio-quality WAV file.
           </div>
         </div>
@@ -989,25 +817,14 @@ def main():
             voice_name = VOICES[selected_voice_label]["name"]
 
             st.markdown(f"""
-            <div style="
-              background:var(--surface-2);
-              border:1px solid var(--border);
-              border-radius:var(--radius-md);
-              padding:1rem 1.2rem;
-              margin-top:0.8rem;
-            ">
+            <div style="background:var(--surface-2);border:1px solid var(--border);
+                        border-radius:var(--radius-md);padding:1rem 1.2rem;margin-top:0.8rem;">
               <div style="font-family:var(--font-mono);font-size:0.6rem;
-                          letter-spacing:0.25em;color:var(--gold);
-                          text-transform:uppercase;margin-bottom:0.5rem;">
+                          letter-spacing:0.25em;color:var(--gold);text-transform:uppercase;">
                 Selected Voice
               </div>
-              <div style="font-size:0.9rem;color:var(--white);
-                          font-weight:600;margin-bottom:0.2rem;">
+              <div style="font-size:0.9rem;color:var(--white);font-weight:600;margin-top:0.5rem;">
                 {selected_voice_label.split(" (")[0]}
-              </div>
-              <div style="font-family:var(--font-mono);font-size:0.65rem;
-                          color:var(--cream-dim);">
-                {voice_name}
               </div>
             </div>
             """, unsafe_allow_html=True)
@@ -1025,74 +842,150 @@ def main():
             pct = char_count / MAX_CHARS
             cls = "danger" if pct > 0.9 else ("warn" if pct > 0.7 else "")
             st.markdown(
-                f'<div class="char-counter {cls}">'
-                f'{char_count:,} / {MAX_CHARS:,} characters</div>',
+                f'<div class="char-counter {cls}">{char_count:,} / {MAX_CHARS:,} characters</div>',
                 unsafe_allow_html=True
             )
 
         st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
 
-        synth_btn = st.button(
-            "✦ Synthesise Speech", key="btn_synth", use_container_width=True
-        )
-
-        # ── Process synthesis ─────────────────────────────────────────────
-        if synth_btn:
+        if st.button("✦ Synthesise Speech", key="btn_synth", use_container_width=True):
             if not tts_text or not tts_text.strip():
                 st.warning("Please enter some text to synthesise.")
             else:
                 with st.spinner("Generating audio…"):
-                    outcome = synthesise_speech(
-                        tts_text.strip(), voice_name, AZURE_KEY, AZURE_REGION
-                    )
+                    outcome = synthesise_speech(tts_text.strip(), voice_name, AZURE_SPEECH_KEY, AZURE_SPEECH_REGION)
 
                 if outcome["success"]:
                     st.session_state["tts_audio"] = outcome["audio"]
                     st.session_state["tts_voice_used"] = selected_voice_label
                 else:
-                    st.error(f"Synthesis failed: {outcome['error']}")
+                    st.error(f"❌ {outcome['error']}")
 
-        # ── Show cached audio ─────────────────────────────────────────────
         if st.session_state.get("tts_audio"):
-            audio_bytes = st.session_state["tts_audio"]
-            voice_used  = st.session_state.get("tts_voice_used", "")
-
-            st.markdown("""
-            <div class="section-sep">
-              <div class="section-sep-text">Generated Audio</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            st.markdown(f"""
-            <div style="display:flex;align-items:center;justify-content:space-between;
-                        margin-bottom:0.8rem;">
-              <div class="status-badge">
-                <div class="status-dot"></div>
-                Ready to play
-              </div>
-              <div style="font-family:var(--font-mono);font-size:0.65rem;
-                          color:var(--cream-dim);">
-                {voice_used}
-              </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            st.audio(audio_bytes, format="audio/wav")
-
+            st.markdown("<div style='margin:1.5rem 0;height:1px;background:var(--border);'></div>", unsafe_allow_html=True)
+            st.audio(st.session_state["tts_audio"], format="audio/wav")
             st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
-
             st.download_button(
                 "⬇  Download WAV Audio",
-                data=audio_bytes,
+                data=st.session_state["tts_audio"],
                 file_name="voxis_speech.wav",
                 mime="audio/wav",
                 use_container_width=True,
             )
 
+    # ═════════════════════════════════════════════════════════════════════════
+    # TAB 3 — OCR (IMAGE TO TEXT)
+    # ═════════════════════════════════════════════════════════════════════════
+    with tab_ocr:
+        st.markdown("""
+        <div class="panel">
+          <div class="panel-label">03 &nbsp; Extract Text</div>
+          <div class="panel-title">Image OCR</div>
+          <div class="panel-desc">
+            Upload an image and VOXIS will instantly extract all text using
+            Azure Computer Vision OCR with support for 100+ languages and
+            precise character recognition.
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        col_info, col_upload = st.columns([1, 2], gap="medium")
+
+        with col_info:
+            st.markdown("""
+            <div style="background:var(--surface-2);border:1px solid var(--border-soft);
+                        border-radius:var(--radius-md);padding:1rem 1.2rem;margin-top:0rem;">
+              <div style="font-family:var(--font-mono);font-size:0.6rem;
+                          letter-spacing:0.25em;color:var(--gold);text-transform:uppercase;">
+                Supported Formats
+              </div>
+              <div style="font-size:0.78rem;color:var(--cream-dim);margin-top:0.6rem;line-height:1.8;">
+                JPG · PNG · BMP · PDF · TIFF
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with col_upload:
+            uploaded_image = st.file_uploader(
+                "Drop your image here",
+                type=["jpg", "jpeg", "png", "bmp", "pdf", "tiff"],
+                key="ocr_file",
+                label_visibility="collapsed",
+            )
+            if uploaded_image:
+                st.image(uploaded_image, use_container_width=True)
+
+        st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
+
+        if st.button("✦ Extract Text", key="btn_ocr", use_container_width=True):
+            if not uploaded_image:
+                st.warning("Please upload an image first.")
+            else:
+                with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+                    tmp.write(uploaded_image.read())
+                    tmp_path = tmp.name
+
+                with st.spinner("Extracting text…"):
+                    outcome = extract_ocr(tmp_path, AZURE_VISION_ENDPOINT, AZURE_VISION_KEY)
+
+                os.unlink(tmp_path)
+
+                if outcome["success"]:
+                    st.session_state["ocr_result"] = outcome["text"]
+                    st.session_state["ocr_confidence"] = outcome["confidence"]
+                else:
+                    st.error(f"❌ {outcome['error']}")
+
+        if st.session_state.get("ocr_result"):
+            text = st.session_state["ocr_result"]
+            confidence = st.session_state.get("ocr_confidence", 0)
+            
+            render_result(text, "Extracted Text")
+            
+            st.markdown(f"""
+            <div style="margin-top:1rem;padding:0.8rem;background:var(--surface-3);
+                        border:1px solid var(--border-soft);border-radius:var(--radius-md);">
+              <div style="font-family:var(--font-mono);font-size:0.62rem;
+                          letter-spacing:0.15em;color:var(--gold);text-transform:uppercase;">
+                Recognition Confidence
+              </div>
+              <div style="font-size:1.1rem;color:var(--white);font-weight:600;margin-top:0.4rem;">
+                {confidence:.1%}
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.markdown("<div style='height:0.6rem'></div>", unsafe_allow_html=True)
+
+            col1, col2 = st.columns(2, gap="small")
+            with col1:
+                st.download_button(
+                    "⬇  Download as .txt",
+                    data=text,
+                    file_name="voxis_ocr.txt",
+                    mime="text/plain",
+                    use_container_width=True,
+                )
+            with col2:
+                payload = json.dumps({
+                    "extracted_text": text,
+                    "word_count": len(text.split()),
+                    "character_count": len(text),
+                    "confidence": float(confidence),
+                }, indent=2)
+                st.download_button(
+                    "⬇  Download as .json",
+                    data=payload,
+                    file_name="voxis_ocr.json",
+                    mime="application/json",
+                    use_container_width=True,
+                )
+
     # ── FOOTER ───────────────────────────────────────────────────────────────
     st.markdown("""
     <div class="voxis-footer">
-      VOXIS · Powered by Azure Cognitive Services · Built with Streamlit
+      VOXIS · Powered by Azure Cognitive Services · Built with Streamlit<br>
+      Made by Ankit Tank
     </div>
     """, unsafe_allow_html=True)
 

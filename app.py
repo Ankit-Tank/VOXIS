@@ -914,7 +914,7 @@ def main():
                 Supported Formats
               </div>
               <div style="font-size:0.78rem;color:var(--cream-dim);margin-top:0.6rem;line-height:1.8;">
-                JPG · PNG · BMP · PDF · TIFF
+                JPG · PNG · BMP · TIFF
               </div>
             </div>
             """, unsafe_allow_html=True)

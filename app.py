@@ -408,13 +408,27 @@ p, span, label, div { font-family: var(--font-ui) !important; }
   text-align: center;
   padding: 2rem 0 1rem;
   font-family: var(--font-mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.2em;
-  color: var(--cream-dim);
-  opacity: 0.35;
+  font-size: 0.75rem;
+  letter-spacing: 0.25em;
   text-transform: uppercase;
-  border-top: 1px solid var(--border-soft);
   margin-top: 2rem;
+  line-height: 1.9;
+
+  background: linear-gradient(
+      90deg,
+      #C9A84C 0%,
+      #F7E7A1 50%,
+      #C9A84C 100%
+  );
+
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+
+  text-shadow:
+      0 0 10px rgba(201,168,76,0.35),
+      0 0 20px rgba(201,168,76,0.15);
+
+  border-top: 1px solid rgba(201,168,76,0.15);
 }
 
 /* ── MODE TABS ────────────────────────────────────────── */

@@ -27,7 +27,7 @@ git clone https://github.com/Ankit-Tank/voxis.git
 cd voxis
 ```
 
-### 2. Create a virtual environment
+### 2. Create a virtual environment.
 
 ```bash
 python -m venv .venv
